@@ -65,6 +65,11 @@ impl<N: Network> Finalize<N> {
     pub fn commands(&self) -> &[Command<N>] {
         &self.commands
     }
+
+    /// Returns the minimum fee, in microcredits, required to run the finalize.
+    pub fn fee_in_microcredits(&self) -> u64 {
+        1_000_000_000
+    }
 }
 
 impl<N: Network> Finalize<N> {
