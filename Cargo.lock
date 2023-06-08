@@ -3032,6 +3032,7 @@ dependencies = [
  "tracing-test",
  "ureq",
  "walkdir",
+ "web-sys",
 ]
 
 [[package]]

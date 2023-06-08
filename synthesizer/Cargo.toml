@@ -187,3 +187,7 @@ version = "0.2"
 
 [dev-dependencies.walkdir]
 version = "2"
+
+[dependencies.web-sys]
+version = "0.3.52"
+features = [ "console" ]

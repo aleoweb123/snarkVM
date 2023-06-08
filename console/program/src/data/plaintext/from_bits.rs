@@ -29,6 +29,9 @@ impl<N: Network> FromBits for Plaintext<N> {
 
             let literal_size = u16::from_bits_le(&bits_le[counter..counter + 16])?;
             counter += 16;
+            if literal_variant > 16 || (literal_size as usize) + counter > bits_le.len() {
+                bail!("Array access out of bounds.");
+            }
 
             let literal = Literal::from_bits_le(literal_variant, &bits_le[counter..counter + literal_size as usize])?;
 
@@ -47,15 +50,24 @@ impl<N: Network> FromBits for Plaintext<N> {
 
             let mut members = IndexMap::with_capacity(num_members as usize);
             for _ in 0..num_members {
+                if 8 + counter > bits_le.len() {
+                    bail!("Array access out of bounds.");
+                }
                 let identifier_size = u8::from_bits_le(&bits_le[counter..counter + 8])?;
                 counter += 8;
-
+                if identifier_size as usize + counter > bits_le.len() {
+                    bail!("Array access out of bounds.");
+                }
                 let identifier = Identifier::from_bits_le(&bits_le[counter..counter + identifier_size as usize])?;
                 counter += identifier_size as usize;
-
+                if 16 + counter > bits_le.len() {
+                    bail!("Array access out of bounds.");
+                }
                 let member_size = u16::from_bits_le(&bits_le[counter..counter + 16])?;
                 counter += 16;
-
+                if (member_size as usize) + counter > bits_le.len() {
+                    bail!("Array access out of bounds.");
+                }
                 let value = Plaintext::from_bits_le(&bits_le[counter..counter + member_size as usize])?;
                 counter += member_size as usize;
 

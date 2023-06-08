@@ -91,15 +91,24 @@ impl<N: Network> StackEvaluate<N> for Stack<N> {
     #[inline]
     fn evaluate_function<A: circuit::Aleo<Network = N>>(&self, call_stack: CallStack<N>) -> Result<Response<N>> {
         let timer = timer!("Stack::evaluate_function");
+        let evaluate_function = "[stack] [evaluate_function] all time";
+        web_sys::console::time_with_label(evaluate_function);
 
+        let logname = "[stack] [evaluate_function] Retrieve the next request";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // Retrieve the next request, based on the call stack mode.
         let (request, call_stack) = match &call_stack {
             CallStack::Evaluate(authorization) => (authorization.next()?, call_stack),
             CallStack::Execute(authorization, ..) => (authorization.peek_next()?, call_stack.replicate()),
             _ => bail!("Illegal operation: call stack must be `Evaluate` or `Execute` in `evaluate_function`."),
         };
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Retrieve the next request");
 
+        let logname = "[stack] [evaluate_function] Perform input checks";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // Ensure the network ID matches.
         ensure!(
             **request.network_id() == N::ID,
@@ -124,27 +133,43 @@ impl<N: Network> StackEvaluate<N> for Stack<N> {
                 inputs.len()
             )
         }
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Perform input checks");
 
+        let logname = "[stack] [evaluate_function] Initialize the registers";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // Initialize the registers.
         let mut registers = Registers::<N, A>::new(call_stack, self.get_register_types(function.name())?.clone());
         // Set the transition caller.
         registers.set_caller(caller);
         // Set the transition view key.
         registers.set_tvk(tvk);
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Initialize the registers");
 
+        let logname = "[stack] [evaluate_function] Verify the request";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // Ensure the request is well-formed.
         ensure!(request.verify(&function.input_types()), "Request is invalid");
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Verify the request");
 
+        let logname = "[stack] [evaluate_function] Store the inputs";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // Store the inputs.
         function.inputs().iter().map(|i| i.register()).zip_eq(inputs).try_for_each(|(register, input)| {
             // Assign the input value to the register.
             registers.store(self, register, input.clone())
         })?;
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Store the inputs");
 
+        let logname = "[stack] [evaluate_function] Evaluate the instructions";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // Evaluate the instructions.
         for instruction in function.instructions() {
             // If the evaluation fails, bail and return the error.
@@ -152,12 +177,20 @@ impl<N: Network> StackEvaluate<N> for Stack<N> {
                 bail!("Failed to evaluate instruction ({instruction}): {error}");
             }
         }
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Evaluate the instructions");
 
+        let logname = "[stack] [evaluate_function] Retrieve the output operands";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // Retrieve the output operands.
         let output_operands = &function.outputs().iter().map(|output| output.operand()).collect::<Vec<_>>();
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Retrieve the output operands");
 
+        let logname = "[stack] [evaluate_function] Load the outputs";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // Load the outputs.
         let outputs = output_operands
             .iter()
@@ -176,8 +209,10 @@ impl<N: Network> StackEvaluate<N> for Stack<N> {
                 }
             })
             .collect::<Result<Vec<_>>>()?;
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Load the outputs");
 
+        web_sys::console::time_end_with_label(evaluate_function);
         finish!(timer);
 
         // Map the output operands to registers.

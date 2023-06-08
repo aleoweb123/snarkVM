@@ -122,7 +122,12 @@ impl<N: Network> StackExecute<N> for Stack<N> {
     #[inline]
     fn execute_function<A: circuit::Aleo<Network = N>>(&self, mut call_stack: CallStack<N>) -> Result<Response<N>> {
         let timer = timer!("Stack::execute_function");
+        let execute_function = "[execute] all time";
+        web_sys::console::time_with_label(execute_function);
 
+        let logname = "[execute] Retrieve the input and output types";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // Ensure the call stack is not `Evaluate`.
         ensure!(!matches!(call_stack, CallStack::Evaluate(..)), "Illegal operation: cannot evaluate in execute mode");
 
@@ -152,19 +157,31 @@ impl<N: Network> StackExecute<N> for Stack<N> {
         let input_types = function.input_types();
         // Retrieve the output types.
         let output_types = function.output_types();
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Retrieve the input and output types");
 
+        let logname = "[execute] Verify the input types";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // Ensure the inputs match their expected types.
         console_request.inputs().iter().zip_eq(&input_types).try_for_each(|(input, input_type)| {
             // Ensure the input matches the input type in the function.
             self.matches_value_type(input, input_type)
         })?;
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Verify the input types");
 
+        let logname = "[execute] Verify the request";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // Ensure the request is well-formed.
         ensure!(console_request.verify(&input_types), "Request is invalid");
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Verify the request");
 
+        let logname = "[execute] Initialize the registers";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // Initialize the registers.
         let mut registers = Registers::new(call_stack, self.get_register_types(function.name())?.clone());
 
@@ -187,8 +204,12 @@ impl<N: Network> StackExecute<N> for Stack<N> {
         // Set the transition view key, as a circuit.
         registers.set_tvk_circuit(request.tvk().clone());
 
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Initialize the registers");
 
+        let logname = "[execute] Store the inputs";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         #[cfg(debug_assertions)]
         Self::log_circuit::<A, _>("Request");
 
@@ -208,8 +229,12 @@ impl<N: Network> StackExecute<N> for Stack<N> {
             // Assign the circuit input to the register.
             registers.store_circuit(self, register, input.clone())
         })?;
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Store the inputs");
 
+        let logname = "[execute] Execute the instructions";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // Initialize a tracker to determine if there are any function calls.
         let mut contains_function_call = false;
 
@@ -234,8 +259,12 @@ impl<N: Network> StackExecute<N> for Stack<N> {
                 }
             }
         }
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Execute the instructions");
 
+        let logname = "[execute] Load the outputs";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // Load the outputs.
         let output_operands = &function.outputs().iter().map(|output| output.operand()).collect::<Vec<_>>();
         let outputs = output_operands
@@ -261,8 +290,12 @@ impl<N: Network> StackExecute<N> for Stack<N> {
                 }
             })
             .collect::<Result<Vec<_>>>()?;
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Load the outputs");
 
+        let logname = "[execute] Construct the response";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // Map the output operands into registers.
         let output_registers = output_operands
             .iter()
@@ -296,8 +329,12 @@ impl<N: Network> StackExecute<N> for Stack<N> {
             &output_types,
             &output_registers,
         );
+        web_sys::console::time_end_with_label(logname);
         lap!(timer, "Construct the response");
 
+        let logname = "[execute] Construct the finalize inputs";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         #[cfg(debug_assertions)]
         Self::log_circuit::<A, _>("Response");
 
@@ -360,6 +397,7 @@ impl<N: Network> StackExecute<N> for Stack<N> {
                 #[cfg(debug_assertions)]
                 Self::log_circuit::<A, _>("Finalize");
 
+                web_sys::console::time_end_with_label(logname);
                 lap!(timer, "Construct the finalize inputs");
 
                 // Return the (console) finalize inputs.
@@ -371,6 +409,9 @@ impl<N: Network> StackExecute<N> for Stack<N> {
             None
         };
 
+        let logname = "[execute] Synthesize the function xxx circuit key";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         #[cfg(debug_assertions)]
         Self::log_circuit::<A, _>("Complete");
 
@@ -406,19 +447,27 @@ impl<N: Network> StackExecute<N> for Stack<N> {
             if !self.contains_proving_key(function.name()) {
                 // Add the circuit key to the mapping.
                 self.synthesize_from_assignment(function.name(), &assignment)?;
+                web_sys::console::time_end_with_label(logname);
                 lap!(timer, "Synthesize the {} circuit key", function.name());
             }
         }
 
+        let logname = "[execute] Save the circuit assignment";
+        web_sys::console::log_1(&logname.into());
+        web_sys::console::time_with_label(logname);
         // If the circuit is in `CheckDeployment` mode, then save the assignment.
         if let CallStack::CheckDeployment(_, _, ref assignments) = registers.call_stack() {
             // Add the assignment to the assignments.
             assignments.write().push(assignment);
+            web_sys::console::time_end_with_label(logname);
             lap!(timer, "Save the circuit assignment");
         }
         // If the circuit is in `Execute` mode, then execute the circuit into a transition.
         else if let CallStack::Execute(_, ref trace) = registers.call_stack() {
             registers.ensure_console_and_circuit_registers_match()?;
+            let logname = "[execute] proving_key.prove";
+            web_sys::console::log_1(&logname.into());
+            web_sys::console::time_with_label(logname);
 
             // Construct the transition.
             let transition = Transition::from(&console_request, &response, finalize, &output_types, &output_registers)?;
@@ -441,8 +490,10 @@ impl<N: Network> StackExecute<N> for Stack<N> {
                 (proving_key, assignment),
                 metrics,
             )?;
+            web_sys::console::time_end_with_label(logname);
         }
 
+        web_sys::console::time_end_with_label(execute_function);
         finish!(timer);
 
         // Return the response.
