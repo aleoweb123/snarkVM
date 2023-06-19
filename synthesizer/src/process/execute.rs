@@ -17,50 +17,55 @@ use super::*;
 impl<N: Network> Process<N> {
     /// Executes the given authorization.
     #[inline]
-    pub fn execute<A: circuit::Aleo<Network = N>>(
+    pub fn execute<A: circuit::Aleo<Network = N>, R: Rng + CryptoRng>(
         &self,
         authorization: Authorization<N>,
-    ) -> Result<(Response<N>, Trace<N>)> {
+        rng: &mut R,
+    ) -> Result<(Response<N>, Execution<N>, Inclusion<N>, Vec<CallMetrics<N>>)> {
         let timer = timer!("Process::execute");
 
         // Retrieve the main request (without popping it).
         let request = authorization.peek_next()?;
-        // Construct the locator.
-        let locator = Locator::new(*request.program_id(), *request.function_name());
 
         #[cfg(feature = "aleo-cli")]
-        println!("{}", format!(" • Executing '{locator}'...",).dimmed());
+        println!("{}", format!(" • Executing '{}/{}'...", request.program_id(), request.function_name()).dimmed());
 
-        // Initialize the trace.
-        let trace = Arc::new(RwLock::new(Trace::new()));
+        // Initialize the execution.
+        let execution = Arc::new(RwLock::new(Execution::new()));
+        // Initialize the inclusion.
+        let inclusion = Arc::new(RwLock::new(Inclusion::new()));
+        // Initialize the metrics.
+        let metrics = Arc::new(RwLock::new(Vec::new()));
         // Initialize the call stack.
-        let call_stack = CallStack::execute(authorization, trace.clone())?;
+        let call_stack = CallStack::execute(authorization, execution.clone(), inclusion.clone(), metrics.clone())?;
         lap!(timer, "Initialize call stack");
-
         // Execute the circuit.
-        let response = self.get_stack(request.program_id())?.execute_function::<A>(call_stack)?;
+        let response = self.get_stack(request.program_id())?.execute_function::<A, R>(call_stack, rng)?;
         lap!(timer, "Execute the function");
-
-        // Extract the trace.
-        let trace = Arc::try_unwrap(trace).unwrap().into_inner();
-        // Ensure the trace is not empty.
-        ensure!(!trace.transitions().is_empty(), "Execution of '{locator}' is empty");
+        // Extract the execution.
+        let execution = Arc::try_unwrap(execution).unwrap().into_inner();
+        // Ensure the execution is not empty.
+        ensure!(!execution.is_empty(), "Execution of '{}/{}' is empty", request.program_id(), request.function_name());
+        // Extract the inclusion.
+        let inclusion = Arc::try_unwrap(inclusion).unwrap().into_inner();
+        // Extract the metrics.
+        let metrics = Arc::try_unwrap(metrics).unwrap().into_inner();
 
         finish!(timer);
-        Ok((response, trace))
+        Ok((response, execution, inclusion, metrics))
     }
 
     /// Verifies the given execution is valid.
     /// Note: This does *not* check that the global state root exists in the ledger.
     #[inline]
-    pub fn verify_execution(&self, execution: &Execution<N>) -> Result<()> {
+    pub fn verify_execution<const VERIFY_INCLUSION: bool>(&self, execution: &Execution<N>) -> Result<()> {
         let timer = timer!("Process::verify_execution");
 
         // Ensure the execution contains transitions.
         ensure!(!execution.is_empty(), "There are no transitions in the execution");
 
         // Ensure the number of transitions matches the program function.
-        let locator = {
+        {
             // Retrieve the transition (without popping it).
             let transition = execution.peek()?;
             // Retrieve the stack.
@@ -72,13 +77,14 @@ impl<N: Network> Process<N> {
                 "The number of transitions in the execution is incorrect. Expected {number_of_calls}, but found {}",
                 execution.len()
             );
-            // Output the locator of the main function.
-            Locator::new(*transition.program_id(), *transition.function_name()).to_string()
-        };
+        }
         lap!(timer, "Verify the number of transitions");
 
-        // Initialize a map of verifying keys to public inputs.
-        let mut verifier_inputs = HashMap::new();
+        // Ensure the inclusion proof is valid.
+        if VERIFY_INCLUSION {
+            Inclusion::verify_execution(execution)?;
+            lap!(timer, "Verify the inclusion proof");
+        }
 
         // Replicate the execution stack for verification.
         let mut queue = execution.clone();
@@ -202,26 +208,14 @@ impl<N: Network> Process<N> {
 
             // Retrieve the verifying key.
             let verifying_key = self.get_verifying_key(stack.program_id(), function.name())?;
-            // Save the verifying key and its inputs.
-            verifier_inputs
-                .entry(Locator::new(*stack.program_id(), *function.name()))
-                .or_insert((verifying_key, vec![]))
-                .1
-                .push(inputs);
+            // Ensure the transition proof is valid.
+            ensure!(
+                verifying_key.verify(&function.name().to_string(), &inputs, transition.proof()),
+                "Transition is invalid - failed to verify transition proof"
+            );
 
-            lap!(timer, "Constructed the verifier inputs for a transition of {}", function.name());
+            lap!(timer, "Verify transition proof for {}", function.name());
         }
-
-        // Count the number of verifier instances.
-        let num_instances = verifier_inputs.values().map(|(_, inputs)| inputs.len()).sum::<usize>();
-        // Ensure the number of instances matches the number of transitions.
-        ensure!(num_instances == execution.transitions().len(), "The number of verifier instances is incorrect");
-
-        // Construct the list of verifier inputs.
-        let verifier_inputs = verifier_inputs.values().cloned().collect();
-        // Verify the execution proof.
-        Trace::verify_execution_proof(&locator, verifier_inputs, execution)?;
-        lap!(timer, "Verify the proof");
 
         finish!(timer);
         Ok(())

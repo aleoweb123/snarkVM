@@ -25,13 +25,8 @@ impl<N: Network> Stack<N> {
         rng: &mut R,
     ) -> Result<Authorization<N>> {
         let timer = timer!("Stack::authorize");
-
-        let authorize = "[Stack] [authorize] all time";
-        web_sys::console::time_with_label(authorize);
-
-        let logname = "[Stack] [authorize] Verify the number of inputs";
-        web_sys::console::log_1(&logname.into());
-        web_sys::console::time_with_label(logname);
+        web_sys::console::log_1(&"[authorize] Stack::authorize".into());
+        web_sys::console::time_with_label("[authorize] Stack::authorize");
         
         // Ensure the program contains functions.
         ensure!(!self.program.functions().is_empty(), "Program '{}' has no functions", self.program.id());
@@ -52,28 +47,31 @@ impl<N: Network> Stack<N> {
             )
         }
         lap!(timer, "Verify the number of inputs");
+        web_sys::console::log_1(&"[authorize] Verify the number of inputs".into());
+        web_sys::console::time_with_label("[authorize] Verify the number of inputs");
 
-        let logname = "[Stack] [authorize] Compute the request";
-        web_sys::console::log_1(&logname.into());
-        web_sys::console::time_with_label(logname);
         // Compute the request.
         let request = Request::sign(private_key, *self.program.id(), function_name, inputs, &input_types, rng)?;
         lap!(timer, "Compute the request");
-
-        let logname = "[Stack] [authorize] Construct the authorization from the function";
-        web_sys::console::log_1(&logname.into());
-        web_sys::console::time_with_label(logname);
+        web_sys::console::time_end_with_label("[authorize] Verify the number of inputs");
+        web_sys::console::log_1(&"[authorize] Compute the request".into());
+        web_sys::console::time_with_label("[authorize] Compute the request");
         // Initialize the authorization.
+        web_sys::console::log_1(&"[authorize] Authorization new".into());
+        web_sys::console::time_with_label("[authorize] Authorization new");
         let authorization = Authorization::new(&[request.clone()]);
+        web_sys::console::time_end_with_label("[authorize] Authorization new");
         // Construct the call stack.
+        web_sys::console::log_1(&"[authorize] CallStack Authorize".into());
+        web_sys::console::time_with_label("[authorize] CallStack Authorize");
         let call_stack = CallStack::Authorize(vec![request], *private_key, authorization.clone());
-        // Construct the authorization from the function.
-        let _response = self.execute_function::<A>(call_stack)?;
-        web_sys::console::time_end_with_label(logname);
+        web_sys::console::time_end_with_label("[authorize] CallStack Authorize");
+        // Construct the authorization from the function.`
+        let _response = self.execute_function::<A, R>(call_stack, rng)?;
         lap!(timer, "Construct the authorization from the function");
-
-        web_sys::console::time_end_with_label(authorize);
+        web_sys::console::time_end_with_label("[authorize] Compute the request");
         finish!(timer);
+        web_sys::console::time_end_with_label("[authorize] Stack::authorize");
 
         // Return the authorization.
         Ok(authorization)

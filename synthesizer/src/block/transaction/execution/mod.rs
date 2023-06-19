@@ -16,10 +16,7 @@ mod bytes;
 mod serialize;
 mod string;
 
-use crate::{
-    block::{Transaction, Transition},
-    snark::Proof,
-};
+use crate::{snark::Proof, Transition};
 use console::{account::Field, network::prelude::*};
 
 use indexmap::IndexMap;
@@ -30,24 +27,25 @@ pub struct Execution<N: Network> {
     transitions: IndexMap<N::TransitionID, Transition<N>>,
     /// The global state root.
     global_state_root: N::StateRoot,
-    /// The proof.
-    proof: Option<Proof<N>>,
+    /// The inclusion proof.
+    inclusion_proof: Option<Proof<N>>,
 }
 
 impl<N: Network> Execution<N> {
     /// Initialize a new `Execution` instance.
     pub fn new() -> Self {
-        Self { transitions: Default::default(), global_state_root: Default::default(), proof: None }
+        Self { transitions: Default::default(), global_state_root: Default::default(), inclusion_proof: None }
     }
 
     /// Initializes a new `Execution` instance with the given transitions.
     pub fn from(
         transitions: impl Iterator<Item = Transition<N>>,
         global_state_root: N::StateRoot,
-        proof: Option<Proof<N>>,
+        inclusion_proof: Option<Proof<N>>,
     ) -> Result<Self> {
         // Construct the execution.
-        let execution = Self { transitions: transitions.map(|t| (*t.id(), t)).collect(), global_state_root, proof };
+        let execution =
+            Self { transitions: transitions.map(|t| (*t.id(), t)).collect(), global_state_root, inclusion_proof };
         // Ensure the transitions are not empty.
         ensure!(!execution.transitions.is_empty(), "Execution cannot initialize from empty list of transitions");
         // Return the new `Execution` instance.
@@ -64,14 +62,9 @@ impl<N: Network> Execution<N> {
         self.global_state_root
     }
 
-    /// Returns the proof.
-    pub const fn proof(&self) -> Option<&Proof<N>> {
-        self.proof.as_ref()
-    }
-
-    /// Returns the execution ID.
-    pub fn to_execution_id(&self) -> Result<Field<N>> {
-        Ok(*Transaction::execution_tree(self, &None)?.root())
+    /// Returns the inclusion proof.
+    pub const fn inclusion_proof(&self) -> Option<&Proof<N>> {
+        self.inclusion_proof.as_ref()
     }
 }
 

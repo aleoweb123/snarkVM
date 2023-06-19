@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::store::{
-    helpers::rocksdb::{self, DataMap, Database, MapID, TransitionInputMap, TransitionMap, TransitionOutputMap},
-    InputStorage,
-    InputStore,
-    OutputStorage,
-    OutputStore,
-    TransitionStorage,
+use crate::{
+    snark::Proof,
+    store::{
+        helpers::rocksdb::{self, DataMap, Database, MapID, TransitionInputMap, TransitionMap, TransitionOutputMap},
+        InputStorage,
+        InputStore,
+        OutputStorage,
+        OutputStore,
+        TransitionStorage,
+    },
 };
 use console::{
     prelude::*,
@@ -35,6 +38,8 @@ pub struct TransitionDB<N: Network> {
     input_store: InputStore<N, InputDB<N>>,
     /// The transition output store.
     output_store: OutputStore<N, OutputDB<N>>,
+    /// The transition proofs.
+    proof_map: DataMap<N::TransitionID, Proof<N>>,
     /// The transition finalize inputs.
     finalize_map: DataMap<N::TransitionID, Option<Vec<Value<N>>>>,
     /// The transition public keys.
@@ -53,6 +58,7 @@ impl<N: Network> TransitionStorage<N> for TransitionDB<N> {
     type InputStorage = InputDB<N>;
     type OutputStorage = OutputDB<N>;
     type FinalizeMap = DataMap<N::TransitionID, Option<Vec<Value<N>>>>;
+    type ProofMap = DataMap<N::TransitionID, Proof<N>>;
     type TPKMap = DataMap<N::TransitionID, Group<N>>;
     type ReverseTPKMap = DataMap<Group<N>, N::TransitionID>;
     type TCMMap = DataMap<N::TransitionID, Field<N>>;
@@ -65,6 +71,7 @@ impl<N: Network> TransitionStorage<N> for TransitionDB<N> {
             input_store: InputStore::open(dev)?,
             output_store: OutputStore::open(dev)?,
             finalize_map: rocksdb::RocksDB::open_map(N::ID, dev, MapID::Transition(TransitionMap::Finalize))?,
+            proof_map: rocksdb::RocksDB::open_map(N::ID, dev, MapID::Transition(TransitionMap::Proof))?,
             tpk_map: rocksdb::RocksDB::open_map(N::ID, dev, MapID::Transition(TransitionMap::TPK))?,
             reverse_tpk_map: rocksdb::RocksDB::open_map(N::ID, dev, MapID::Transition(TransitionMap::ReverseTPK))?,
             tcm_map: rocksdb::RocksDB::open_map(N::ID, dev, MapID::Transition(TransitionMap::TCM))?,
@@ -90,6 +97,11 @@ impl<N: Network> TransitionStorage<N> for TransitionDB<N> {
     /// Returns the transition finalize inputs map.
     fn finalize_map(&self) -> &Self::FinalizeMap {
         &self.finalize_map
+    }
+
+    /// Returns the transition proofs.
+    fn proof_map(&self) -> &Self::ProofMap {
+        &self.proof_map
     }
 
     /// Returns the transition public keys.

@@ -31,13 +31,6 @@ pub struct Locator<N: Network> {
 }
 
 impl<N: Network> Locator<N> {
-    /// Initializes a locator from a program ID and resource.
-    pub fn new(program_id: ProgramID<N>, resource: Identifier<N>) -> Self {
-        Self { id: program_id, resource }
-    }
-}
-
-impl<N: Network> Locator<N> {
     /// Returns the program ID.
     #[inline]
     pub const fn program_id(&self) -> &ProgramID<N> {

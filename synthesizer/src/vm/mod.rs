@@ -25,18 +25,18 @@ pub use finalize::FinalizeMode;
 
 use crate::{
     atomic_finalize,
-    block::{Block, ConfirmedTransaction, Deployment, Execution, Fee, Header, Transaction, Transactions},
-    cast_mut_ref,
+    block::{Block, ConfirmedTransaction, Deployment, Execution, Fee, Header, Transaction, Transactions, Transition},
     cast_ref,
     process,
-    process::{Authorization, Process, Query, Trace},
+    process::{Authorization, Inclusion, InclusionAssignment, Process, Query},
     program::Program,
     store::{BlockStore, ConsensusStorage, ConsensusStore, FinalizeStore, TransactionStore, TransitionStore},
+    CallMetrics,
 };
 use console::{
     account::{Address, PrivateKey},
     network::prelude::*,
-    program::{Entry, Identifier, Literal, Locator, Plaintext, ProgramID, ProgramOwner, Record, Response, Value},
+    program::{Entry, Identifier, Literal, Plaintext, ProgramID, ProgramOwner, Record, Response, Value},
     types::Field,
 };
 
@@ -166,12 +166,6 @@ impl<N: Network, C: ConsensusStorage<N>> VM<N, C> {
     /// Adds the given block into the VM.
     #[inline]
     pub fn add_next_block(&self, block: &Block<N>) -> Result<()> {
-        // TODO (raychu86): Move this to the `check_next_block` call for block verification.
-        // Ensure that the block's finalize root matches the transactions.
-        if block.finalize_root() != block.transactions().to_finalize_root()? {
-            bail!("The block's finalize root does not correspond to the transactions.");
-        }
-
         // First, insert the block.
         self.block_store().insert(block)?;
         // Next, finalize the transactions.
@@ -194,15 +188,19 @@ impl<N: Network, C: ConsensusStorage<N>> VM<N, C> {
 pub(crate) mod test_helpers {
     use super::*;
     use crate::{
-        block::{Block, Fee, Header, Metadata, Transition},
         program::Program,
         store::helpers::memory::ConsensusMemory,
+        Block,
+        Fee,
+        Header,
+        Inclusion,
+        Metadata,
+        Transition,
     };
     use console::{
         account::{Address, ViewKey},
         network::Testnet3,
         program::Value,
-        types::Field,
     };
 
     use indexmap::IndexMap;
@@ -323,7 +321,7 @@ function compute:
                 // Deploy.
                 let transaction = vm.deploy(&caller_private_key, &program, fee, None, rng).unwrap();
                 // Verify.
-                assert!(vm.verify_transaction(&transaction, None));
+                assert!(vm.verify_transaction(&transaction));
                 // Return the transaction.
                 transaction
             })
@@ -364,14 +362,13 @@ function compute:
                 .into_iter();
 
                 // Authorize.
-                let authorization =
-                    vm.authorize(&caller_private_key, "credits.aleo", "transfer_private", inputs, rng).unwrap();
+                let authorization = vm.authorize(&caller_private_key, "credits.aleo", "transfer", inputs, rng).unwrap();
                 assert_eq!(authorization.len(), 1);
 
                 // Execute.
                 let transaction = vm.execute_authorization(authorization, None, None, rng).unwrap();
                 // Verify.
-                assert!(!vm.verify_transaction(&transaction, None));
+                assert!(!vm.verify_transaction(&transaction));
                 // Return the transaction.
                 transaction
             })
@@ -410,14 +407,17 @@ function compute:
                 ]
                 .into_iter();
 
-                // Prepare the fee.
-                let fee = Some((record, 100));
+                // Authorize.
+                let authorization = vm.authorize(&caller_private_key, "credits.aleo", "mint", inputs, rng).unwrap();
+                assert_eq!(authorization.len(), 1);
+
+                // Execute the fee.
+                let fee = vm.execute_fee_raw(&caller_private_key, record, 100, None, rng).unwrap().1;
 
                 // Execute.
-                let transaction =
-                    vm.execute(&caller_private_key, ("credits.aleo", "mint"), inputs, fee, None, rng).unwrap();
+                let transaction = vm.execute_authorization(authorization, Some(fee), None, rng).unwrap();
                 // Verify.
-                assert!(vm.verify_transaction(&transaction, None));
+                assert!(vm.verify_transaction(&transaction));
                 // Return the transaction.
                 transaction
             })
@@ -448,14 +448,12 @@ function compute:
                 // Update the VM.
                 vm.add_next_block(&genesis).unwrap();
 
-                // Sample a random rejected ID.
-                let rejected_id = Field::rand(rng);
-
                 // Execute.
-                let (_response, fee) =
-                    vm.execute_fee_raw(&caller_private_key, record, 1u64, rejected_id, None, rng).unwrap();
+                let (_response, fee, _metrics) =
+                    vm.execute_fee_raw(&caller_private_key, record, 1u64, None, rng).unwrap();
                 // Verify.
-                assert!(vm.verify_fee(&fee, rejected_id));
+                assert!(vm.verify_fee(&fee));
+                assert!(Inclusion::verify_fee(&fee).is_ok());
                 // Return the fee.
                 fee
             })
@@ -504,7 +502,9 @@ function compute:
         let header = Header::from(
             *vm.block_store().current_state_root(),
             transactions.to_root().unwrap(),
-            transactions.to_finalize_root().unwrap(),
+            Field::zero(),
+            // TODO (howardwu): Revisit this.
+            // vm.finalize_store().current_finalize_root(),
             Field::zero(),
             metadata,
         )?;

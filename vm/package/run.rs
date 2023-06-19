@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::*;
+use snarkvm_synthesizer::CallMetrics;
 
 impl<N: Network> Package<N> {
     /// Runs a program function with the given inputs.
@@ -24,7 +25,7 @@ impl<N: Network> Package<N> {
         function_name: Identifier<N>,
         inputs: &[Value<N>],
         rng: &mut R,
-    ) -> Result<(Response<N>, Trace<N>)> {
+    ) -> Result<(Response<N>, Execution<N>, Inclusion<N>, Vec<CallMetrics<N>>)> {
         // Retrieve the main program.
         let program = self.program();
         // Retrieve the program ID.
@@ -94,9 +95,9 @@ impl<N: Network> Package<N> {
         process.insert_verifying_key(program_id, &function_name, verifier.verifying_key().clone())?;
 
         // Execute the circuit.
-        let (response, trace) = process.execute::<A>(authorization)?;
+        let (response, execution, inclusion, metrics) = process.execute::<A, R>(authorization, rng)?;
 
-        Ok((response, trace))
+        Ok((response, execution, inclusion, metrics))
     }
 }
 
@@ -124,7 +125,7 @@ mod tests {
         let (private_key, function_name, inputs) =
             crate::package::test_helpers::sample_package_run(package.program_id());
         // Run the program function.
-        let (_response, _trace) =
+        let (_response, _execution, _inclusion, _metrics) =
             package.run::<CurrentAleo, _>(None, &private_key, function_name, &inputs, rng).unwrap();
 
         // Proactively remove the temporary directory (to conserve space).
@@ -149,7 +150,7 @@ mod tests {
         let (private_key, function_name, inputs) =
             crate::package::test_helpers::sample_package_run(package.program_id());
         // Run the program function.
-        let (_response, _trace) =
+        let (_response, _execution, _inclusion, _metrics) =
             package.run::<CurrentAleo, _>(None, &private_key, function_name, &inputs, rng).unwrap();
 
         // Proactively remove the temporary directory (to conserve space).

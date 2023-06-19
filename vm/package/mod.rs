@@ -40,10 +40,11 @@ use crate::{
     synthesizer::{
         snark::{ProvingKey, VerifyingKey},
         CallOperator,
+        Execution,
+        Inclusion,
         Instruction,
         Process,
         Program,
-        Trace,
     },
 };
 

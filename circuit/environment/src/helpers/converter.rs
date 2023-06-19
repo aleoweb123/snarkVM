@@ -134,10 +134,8 @@ impl<F: PrimeField> R1CS<F> {
                 }
 
                 // Finally, add the accumulated constant value to the linear combination.
-                if !lc.to_constant().is_zero() {
-                    linear_combination +=
-                        (lc.to_constant(), snarkvm_r1cs::Variable::new_unchecked(snarkvm_r1cs::Index::Public(0)));
-                }
+                linear_combination +=
+                    (lc.to_constant(), snarkvm_r1cs::Variable::new_unchecked(snarkvm_r1cs::Index::Public(0)));
 
                 // Return the linear combination of the second system.
                 linear_combination

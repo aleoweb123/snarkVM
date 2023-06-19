@@ -13,7 +13,7 @@
 // limitations under the License.
 
 mod assignment;
-pub use assignment::*;
+pub use assignment::Assignment;
 
 pub mod circuit_type;
 pub use circuit_type::*;

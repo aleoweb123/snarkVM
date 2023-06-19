@@ -11,3 +11,5 @@
 !**/powers-of-beta-gamma.usrs
 !**/beta-h.usrs
 !**/neg-powers-of-beta.usrs
+
+Cargo.lock
