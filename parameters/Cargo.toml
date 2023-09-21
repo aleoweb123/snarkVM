@@ -24,7 +24,7 @@ license = "Apache-2.0"
 edition = "2021"
 
 [features]
-default = [ "colored", "remote" ]
+default = [ "colored", "remote", "wasm" ]
 no_std_out = [ ]
 remote = [ "curl" ]
 wasm = [ "encoding", "js-sys", "web-sys" ]
